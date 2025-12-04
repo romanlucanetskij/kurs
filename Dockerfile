@@ -17,11 +17,18 @@ WORKDIR /app
 # Copy published files from build stage
 COPY --from=build /app/publish .
 
-# Expose the port that Render will use (Render typically uses 10000)
-EXPOSE 10000
+# Create a non-root user
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --ingroup appgroup appuser
 
-# Set environment variables - PORT will be provided by Render
-ENV ASPNETCORE_ENVIRONMENT=Production
+# Change ownership
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port 10000 (Render's default)
+EXPOSE 10000
 
 # Run the application
 ENTRYPOINT ["dotnet", "DripCube.dll"]

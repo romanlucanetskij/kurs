@@ -3,13 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using DripCube.Helpers;
 using DripCube.Services;
 using Stripe;
-using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Use environment variable for database connection (set in Render dashboard)
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
-    ?? "Host=dpg-d4g6db8dl3ps73da19pg-a.oregon-postgres.render.com;Database=abcn;Username=user;Password=NBWohmR0QCiyPLqFd2uGR2HWMNvm9GnA;SslMode=Require;Trust Server Certificate=true;";
+Console.WriteLine("=== STARTING DRIPCUBE ===");
+
+// Hardcoded database connection
+var connectionString = "Host=dpg-d4g6db8dl3ps73da19pg-a.oregon-postgres.render.com;Database=abcn;Username=user;Password=NBWohmR0QCiyPLqFd2uGR2HWMNvm9GnA;SslMode=Require;Trust Server Certificate=true;";
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -29,65 +29,57 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddHostedService<DripCube.Services.ChatCleanupService>();
-builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+
+// Hardcoded Cloudinary settings
+builder.Services.Configure<CloudinarySettings>(options =>
+{
+    options.CloudName = "dd8lrzw0s";
+    options.ApiKey = "839158591392738";
+    options.ApiSecret = "EnC6RHDyIYorTryGnLUTrvSRnbo";
+});
+
 builder.Services.AddScoped<PhotoService>();
 
-// Use configuration for Stripe API key (can be overridden by environment variable)
-StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
-    ?? builder.Configuration["Stripe:SecretKey"]
-    ?? "sk_test_51SXRvaRq3TM6Cq5tdg8kEErnMzCdzZ69B0YyCTX3FAU9UDRFWzd4HE1GnKGFSpqhbkO79iy89LKABUX1dixt1Cm700ksXoe0YG";
+// Hardcoded Stripe API key
+StripeConfiguration.ApiKey = "sk_test_51SXRvaRq3TM6Cq5tdg8kEErnMzCdzZ69B0YyCTX3FAU9UDRFWzd4HE1GnKGFSpqhbkO79iy89LKABUX1dixt1Cm700ksXoe0YG";
 
 var app = builder.Build();
 
-Console.WriteLine("=== APPLICATION STARTING ===");
-Console.WriteLine($"Environment: {app.Environment.EnvironmentName}");
-Console.WriteLine($"Connection String (first 50 chars): {connectionString.Substring(0, Math.Min(50, connectionString.Length))}...");
-
-// Database initialization with error handling
+// Database initialization
 try
 {
     using (var scope = app.Services.CreateScope())
     {
-        Console.WriteLine("Creating database scope...");
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        Console.WriteLine("Testing database connection...");
-        await context.Database.CanConnectAsync();
-        Console.WriteLine("Database connection successful!");
+        if (context.Database.CanConnect())
+        {
+            Console.WriteLine("✓ Database connected");
 
-        if (!context.Employees.Any())
-        {
-            Console.WriteLine("Creating admin user...");
-            var admin = new DripCube.Entities.Employee
+            if (!context.Employees.Any())
             {
-                Role = DripCube.Entities.EmployeeRole.Admin,
-                Login = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
-                PersonalId = "ADMIN001",
-                ChatId = "ADMINCHAT",
-                IsActive = true,
-                FirstName = "Big",
-                LastName = "Boss"
-            };
-            context.Employees.Add(admin);
-            await context.SaveChangesAsync();
-            Console.WriteLine("--- ADMIN CREATED: Login: admin / Pass: admin123 ---");
-        }
-        else
-        {
-            Console.WriteLine("Admin user already exists, skipping creation.");
+                var admin = new DripCube.Entities.Employee
+                {
+                    Role = DripCube.Entities.EmployeeRole.Admin,
+                    Login = "admin",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
+                    PersonalId = "ADMIN001",
+                    ChatId = "ADMINCHAT",
+                    IsActive = true,
+                    FirstName = "Big",
+                    LastName = "Boss"
+                };
+                context.Employees.Add(admin);
+                context.SaveChanges();
+                Console.WriteLine("✓ Admin created: admin/admin123");
+            }
         }
     }
-    Console.WriteLine("Database initialization completed successfully!");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"!!! DATABASE INITIALIZATION ERROR: {ex.Message}");
-    Console.WriteLine($"!!! Stack Trace: {ex.StackTrace}");
-    Console.WriteLine("!!! Application will continue but database may not be initialized!");
+    Console.WriteLine($"✗ DB Error: {ex.Message}");
 }
-
-Console.WriteLine("=== STARTING WEB SERVER ===");
 
 if (app.Environment.IsDevelopment())
 {
@@ -102,6 +94,5 @@ app.UseStaticFiles();
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine($"=== SERVER READY - Listening on {Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "default URLs"} ===");
-
+Console.WriteLine("=== SERVER READY ===");
 app.Run();
